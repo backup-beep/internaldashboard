@@ -590,6 +590,7 @@ let isDrillLoading = false;
 let isDiffVisible = false;
 let isMaintenanceVisible = false;
 let isUserGameplayVisible = false;
+let isRangeVisible = false;
 function currentDrillFrame() {
   return drillStack[drillStack.length - 1];
 }

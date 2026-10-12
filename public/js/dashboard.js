@@ -742,16 +742,23 @@ function buildKpiCards(d, prev, response) {
 
   return [
     {
+      label: 'Owner totals',
+      value:
+        kpiLine('Generated', apiField(d, 'ownerTotalGenerated'), 'purple') +
+        kpiLine('Recharged', apiField(d, 'ownerTotalRecharged'), 'up') +
+        kpiLine('Redeemed', apiField(d, 'ownerTotalRedeemed'), 'warn'),
+      valueStack: true,
+      tone: 'purple',
+      viewAll: action('View all', ' data-owner-tx="all"', 'Every owner recharge, redeem and generated transaction'),
+    },
+    {
       label: 'Total bet',
       value: money(bet),
       tone: 'bet',
       sub: 'Total win ' + moneyHtml(win, 'up'),
       visual: liveSpark('bet', 'bet', response),
       delta: kpiDelta(bet, prevWhole?.totalBet, money),
-      actions: [
-        action('By game', ' data-explore="games-bet"', 'RTP by Game, sorted by bet'),
-        action('By player', ' data-explore="users-bet"', 'RTP by User, sorted by bet'),
-      ],
+      viewAll: action('View all', ' data-explore="games-bet"', 'All games, sorted by bet'),
     },
     {
       label: 'Game hold',
@@ -761,19 +768,18 @@ function buildKpiCards(d, prev, response) {
       visual: liveSpark('hold', hold >= 0 ? 'up' : 'down', response),
       delta: prevWhole ? kpiDelta(hold, rowHold(prevWhole), money) : '',
       tip: 'Total bet minus total win across all games',
-      actions: [action('Games by hold', ' data-explore="games-hold"', 'Which games produce the hold (or the loss)')],
+      viewAll: action('View all', ' data-explore="games-hold"', 'All games, sorted by hold'),
     },
     {
       label: 'Whole game RTP',
       value: fmtRtp(rtp),
       tone: rtpToneKey,
       visual: meterHtml(rtp, { max: Math.max(1.5, rtp * 1.1), tone: rtpToneKey, marks: [{ at: 1, label: '100% · break-even' }] }),
-      sub: games.length ? '<b>' + aboveTarget + '</b> of ' + games.length + ' games above target' : 'No game activity',
+      sub: games.length
+        ? '<b>' + aboveTarget + '</b> above · <b>' + belowTarget + '</b> at/below'
+        : 'No game activity',
       delta: prevWhole ? kpiDelta(rtp * 100, rowRtp(prevWhole) * 100, (n) => n.toFixed(2) + ' pp') : '',
-      actions: games.length ? [
-        action('Above target · ' + aboveTarget, ' data-explore="games-above"', 'Games paying out more than their target RTP'),
-        action('At/below · ' + belowTarget, ' data-explore="games-below"', 'Games at or under their target RTP'),
-      ] : [],
+      viewAll: action('View all', ' data-explore="games-rtp"', 'All games, sorted by RTP'),
     },
     {
       label: 'Player net cash',
@@ -786,7 +792,7 @@ function buildKpiCards(d, prev, response) {
       sub: 'In ' + moneyHtml(recharged, 'up') + ' · out ' + moneyHtml(redeemed, 'warn'),
       delta: prev ? kpiDelta(net, Number(prev.totalRecharged || 0) - Number(prev.totalRedeemed || 0), money) : '',
       tip: 'Player recharges minus player redeems',
-      actions: [action('Per-player lookup', ' data-nav="user-gameplay"', 'The summary API only has player totals; User Game Play shows recharge / redeem per player')],
+      viewAll: action('View all', ' data-nav="user-gameplay"', 'Recharge and redeem for every player'),
     },
     {
       label: 'Online now',
@@ -795,32 +801,21 @@ function buildKpiCards(d, prev, response) {
       sub: 'of ' + fmtInt(totalUsers) + ' registered' + (totalUsers ? ' · ' + ((online / totalUsers) * 100).toFixed(1) + '%' : ''),
       visual: liveSpark('online', 'info', response),
       delta: prev ? kpiDelta(online, gameUsersCount(totalGameUsersPayload(prev)), fmtInt) : '',
-      actions: [action('Users & sessions', ' data-kpi="online-users"', 'Who is online, then their sessions')],
-    },
-    {
-      label: 'Owner totals',
-      value:
-        kpiLine('Generated', apiField(d, 'ownerTotalGenerated'), 'purple') +
-        kpiLine('Recharged', apiField(d, 'ownerTotalRecharged'), 'up') +
-        kpiLine('Redeemed', apiField(d, 'ownerTotalRedeemed'), 'warn'),
-      valueStack: true,
-      tone: 'purple',
-      actions: [action('Transactions', ' data-owner-tx="all"', 'Owner recharge / redeem / generated transactions')],
+      viewAll: action('View all', ' data-kpi="online-users"', 'Who is online, then their sessions'),
     },
   ];
 }
 
 function renderKpiCard(k) {
-  const actions = (k.actions || []).map((a) =>
-    '<button type="button" class="link-btn"' + a.attrs + tipAttr(a.tip) + '>' + escHtml(a.label) + ' →</button>'
-  ).join('');
+  const viewAll = k.viewAll
+    ? '<button type="button" class="secondary sm"' + k.viewAll.attrs + tipAttr(k.viewAll.tip) + '>View all</button>'
+    : '';
   return '<div class="kpi tone-' + k.tone + '"' + tipAttr(k.tip) + '>' +
-    '<div class="kpi-label">' + k.label + '</div>' +
+    '<div class="kpi-top"><div class="kpi-label">' + k.label + '</div>' + viewAll + '</div>' +
     '<div class="kpi-value' + (k.valueStack ? ' kpi-value-stack' : '') + '">' + k.value + '</div>' +
     (k.visual ? '<div class="kpi-visual">' + k.visual + '</div>' : '') +
     (k.sub ? '<div class="kpi-sub">' + k.sub + '</div>' : '') +
     (k.delta ? '<div class="kpi-foot">' + k.delta + '</div>' : '') +
-    (actions ? '<div class="kpi-actions">' + actions + '</div>' : '') +
     '</div>';
 }
 
@@ -1055,29 +1050,6 @@ function renderPlayerScatter(d) {
     ' · table →</button></div>');
 }
 
-function renderOnlinePanel(d, response) {
-  const payload = totalGameUsersPayload(d);
-  const count = gameUsersCount(payload);
-  const totalUsers = Number(apiField(d, 'totalUsers', 0));
-  const byGame = new Map();
-  for (const u of gameUsersList(payload)) {
-    const name = u.gameName || 'No active game';
-    byGame.set(name, (byGame.get(name) || 0) + 1);
-  }
-  const items = [...byGame].sort((a, b) => b[1] - a[1]).slice(0, 6)
-    .map(([label, value]) => ({ label, value, tone: label === 'No active game' ? 'flat' : 'info' }));
-  const spark = response === currentLatestResponse() && liveSamples.length >= 2
-    ? '<div class="online-spark"' + tipAttr('Online players over the last ' + liveSampleSpan()) + '>' +
-      sparklineHtml(liveSamples.map((s) => s.online), 'info') + '</div>'
-    : '<p class="chart-note">Trend appears after a few refreshes.</p>';
-
-  setHtml('onlineChart',
-    '<div class="online-head"><strong>' + fmtInt(count) + '</strong><span>players in game' +
-    (totalUsers ? '<br>' + ((count / totalUsers) * 100).toFixed(1) + '% of ' + fmtInt(totalUsers) + ' registered' : '') + '</span></div>' +
-    spark +
-    (items.length ? barListHtml(items) : emptyHtml('Nobody is in a game right now.')));
-}
-
 function starsHtml(avg) {
   const full = Math.round(avg);
   return '<span class="stars" aria-label="' + avg.toFixed(1) + ' of 5 stars">' + '★'.repeat(full) + '<i>' + '★'.repeat(5 - full) + '</i></span>';
@@ -1096,26 +1068,17 @@ function renderFeedbackPanel(d) {
     const n = ratings.filter((r) => Math.round(r) === star).length;
     return { label: star + ' ★', value: n, tone: starTone[star], valueText: n + ' <small>' + ((n / ratings.length) * 100).toFixed(0) + '%</small>' };
   });
-  const latest = entries
-    .filter((f) => feedbackText(f) && parseUtc(f.createdAt))
-    .sort((a, b) => parseUtc(b.createdAt) - parseUtc(a.createdAt))[0];
 
   setHtml('feedbackChart',
     '<div class="fb-head"><strong>' + avg.toFixed(1) + '</strong>' + starsHtml(avg) +
     '<small>' + countLabel(ratings.length, 'rating') + ' · ' + countLabel((d.userFeedbacks || []).length, 'player') + '</small></div>' +
-    barListHtml(items, { max: ratings.length }) +
-    (latest
-      ? '<blockquote class="fb-latest">“' + escHtml(feedbackText(latest)) + '”<cite>' + escHtml(latest.username || 'Player') +
-        ' · ' + escHtml(formatDateTime(latest.createdAt)) + '</cite></blockquote>'
-      : ''));
+    barListHtml(items, { max: ratings.length }));
 }
 
 function renderAnalytics(d, response) {
   renderInsights(d);
   renderGamePerformance(d);
   renderCashflow(d);
-  renderPlayerScatter(d);
-  renderOnlinePanel(d, response);
   renderFeedbackPanel(d);
 }
 
@@ -1126,13 +1089,12 @@ function refreshLiveWidgets() {
   if (!response) return;
   const d = response.data || {};
   setHtml('kpiGrid', buildKpiCards(d, responseHistory[1]?.response?.data, response).map(renderKpiCard).join(''));
-  renderOnlinePanel(d, response);
 }
 
 // ---- Data explorer tabs ----
 
 const HOME_TABLE_WRAP_IDS = ['rtpByGameWrap', 'rtpByUserWrap', 'gamesAboveTargetWrap', 'usersRtpHighWrap', 'userFeedbacksWrap', 'gamesTargetRtpWrap'];
-const ANALYTICS_IDS = ['gamePerfChart', 'cashflowChart', 'playerScatter', 'onlineChart', 'feedbackChart'];
+const ANALYTICS_IDS = ['gamePerfChart', 'cashflowChart', 'feedbackChart'];
 
 let activeExplorerTab = 'sec-rtp-game';
 
@@ -1210,7 +1172,10 @@ function setExplorerTab(sectionId, { scroll = false } = {}) {
   activeExplorerTab = sectionId;
   syncExplorerTabs({ animate: true });
   EXPLORER_RENDERERS[sectionId]?.();
-  if (scroll) $('dataExplorer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) {
+    setOverviewSection(2);
+    $('dataExplorer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 /**
@@ -1318,6 +1283,7 @@ function getActiveView() {
   if (isDiffVisible && !isDemoMode() && responseHistory.length >= 2) return 'diff';
   if (isMaintenanceVisible) return 'maintenance';
   if (isUserGameplayVisible) return 'user-gameplay';
+  if (isRangeVisible) return 'range';
   return 'home';
 }
 
@@ -1345,6 +1311,7 @@ function resetToBaseView() {
   isDiffVisible = false;
   isMaintenanceVisible = false;
   isUserGameplayVisible = false;
+  isRangeVisible = false;
 }
 
 function goHome() {
@@ -1354,6 +1321,7 @@ function goHome() {
   const response = currentSummaryResponse();
   if (response) renderDashboard(response);
   updateDiffPanel();
+  setOverviewSection(0);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1362,6 +1330,15 @@ function openMaintenancePage() {
   isMaintenanceVisible = true;
   setDashboardViewMode();
   loadMaintenanceSettings();
+  setOverviewSection(0);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function openRangePage() {
+  resetToBaseView();
+  isRangeVisible = true;
+  setDashboardViewMode();
+  setOverviewSection(0);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1369,8 +1346,105 @@ function openUserGameplayPage() {
   resetToBaseView();
   isUserGameplayVisible = true;
   setDashboardViewMode();
+  setOverviewSection(0);
   window.scrollTo({ top: 0, behavior: 'smooth' });
   setUserGameplayTab(userGameplayActiveTab || 'summary');
+}
+
+/** 0 = top, 1 = Game performance, 2 = Data explorer. One wheel gesture moves exactly one step. */
+let overviewSection = 0;
+let overviewAnimating = false;
+let overviewGestureUntil = 0;
+let overviewAnimToken = 0;
+
+function setOverviewSection(index) {
+  overviewSection = Math.max(0, Math.min(2, index));
+  overviewAnimToken += 1;
+  overviewAnimating = false;
+  document.documentElement.style.scrollBehavior = '';
+}
+
+function bindOverviewSectionScroll() {
+  function headerHeight() {
+    const n = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-header-sticky-height'));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function stopTops() {
+    const game = document.querySelector('#mainDashboard .analytics-grid');
+    const explorer = $('dataExplorer');
+    if (!game || !explorer) return [];
+    const pad = 12;
+    const topOf = (el) => Math.max(0, window.scrollY + el.getBoundingClientRect().top - headerHeight() - pad);
+    return [0, topOf(game), topOf(explorer)];
+  }
+
+  function nestedCanScroll(node, dy) {
+    const box = node?.closest?.('.table-wrap');
+    if (!box) return false;
+    if (dy > 0) return box.scrollTop + box.clientHeight < box.scrollHeight - 2;
+    return box.scrollTop > 2;
+  }
+
+  function animateTo(top) {
+    const token = ++overviewAnimToken;
+    const root = document.documentElement;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const start = window.scrollY;
+    const dist = top - start;
+    if (reduce || Math.abs(dist) < 2) {
+      root.style.scrollBehavior = 'auto';
+      window.scrollTo(0, top);
+      root.style.scrollBehavior = '';
+      overviewAnimating = false;
+      return;
+    }
+    overviewAnimating = true;
+    root.style.scrollBehavior = 'auto';
+    const duration = Math.min(520, Math.max(340, Math.abs(dist) * 0.42));
+    const t0 = performance.now();
+    function frame(now) {
+      if (token !== overviewAnimToken) return;
+      const t = Math.min(1, (now - t0) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      window.scrollTo(0, start + dist * eased);
+      if (t < 1) requestAnimationFrame(frame);
+      else {
+        overviewAnimating = false;
+        root.style.scrollBehavior = '';
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('wheel', (e) => {
+    if (getActiveView() !== 'home') return;
+    if ($('mainDashboard')?.classList.contains('hidden')) return;
+    if (!$('jsonCard')?.classList.contains('hidden')) return;
+    if (e.ctrlKey || !e.deltaY || Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
+    if (e.target.closest?.('input, textarea, select, .modal')) return;
+    if (nestedCanScroll(e.target, e.deltaY)) return;
+
+    e.preventDefault();
+    const now = Date.now();
+    if (overviewAnimating || now < overviewGestureUntil) {
+      overviewGestureUntil = now + 140;
+      return;
+    }
+
+    const dir = e.deltaY > 0 ? 1 : -1;
+    const tops = stopTops();
+    if (tops.length < 3) return;
+    const next = overviewSection + dir;
+    if (next < 0 || next > 2) {
+      overviewGestureUntil = now + 140;
+      return;
+    }
+
+    overviewSection = next;
+    overviewGestureUntil = now + 140;
+    animateTo(tops[overviewSection]);
+  }, { passive: false });
 }
 
 /** Expose the sticky header height as --app-header-sticky-height for sticky sub-headers. */
@@ -1390,6 +1464,7 @@ function setDashboardViewMode() {
   show($('drillDownCard'), view === 'drill');
   show($('maintenanceCard'), view === 'maintenance');
   show($('userGameplayCard'), view === 'user-gameplay');
+  show($('rangeCard'), view === 'range');
   if (view !== 'drill' || currentDrillFrame()?.type !== 'owner-transactions') {
     show($('drillOwnerTxToolbar'), false);
   }
@@ -1414,5 +1489,6 @@ function updateControlsHighlight() {
   setActive('toggleJsonBtn', jsonVisible && view === 'home');
   setActive('maintenanceBtn', view === 'maintenance');
   setActive('userGameplayBtn', view === 'user-gameplay');
+  setActive('rangeBtn', view === 'range');
   setActive('pauseRefreshBtn', isRefreshPaused && !isDemoMode());
 }

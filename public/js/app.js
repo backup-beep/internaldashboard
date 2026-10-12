@@ -1,6 +1,13 @@
 // Entry point: wires the header / page-level controls, binds every feature, then loads data.
 // Loaded last, after all core and feature scripts.
 
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+function scrollPageToTop() {
+  setOverviewSection(0);
+  window.scrollTo(0, 0);
+}
+
 function resetDrillAndChart() {
   drillStack = [];
   activeChartSpins = [];
@@ -18,7 +25,8 @@ function bindHeaderEvents() {
   $('homeBtn').addEventListener('click', () => goHome());
   $('maintenanceBtn')?.addEventListener('click', () => openMaintenancePage());
   $('userGameplayBtn')?.addEventListener('click', () => openUserGameplayPage());
-  ['maintenanceHomeBtn', 'userGameplayHomeBtn'].forEach((id) => {
+  $('rangeBtn')?.addEventListener('click', () => openRangePage());
+  ['maintenanceHomeBtn', 'userGameplayHomeBtn', 'rangeHomeBtn'].forEach((id) => {
     $(id)?.addEventListener('click', () => goHome());
   });
   $('refreshPageBtn').addEventListener('click', () => window.location.reload());
@@ -129,6 +137,7 @@ function bindWindowEvents() {
     });
   });
   syncStickyHeaderOffset();
+  bindOverviewSectionScroll();
   const stickyHeaderEl = document.querySelector('.app-header');
   if (stickyHeaderEl && typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(() => syncStickyHeaderOffset()).observe(stickyHeaderEl);
@@ -154,15 +163,18 @@ function bindWindowEvents() {
     renderSyncStatus();
   });
   window.addEventListener('pageshow', (e) => {
+    scrollPageToTop();
     if (e.persisted) {
       isDiffVisible = false;
       clearResponseHistory();
       loadData(false);
     }
   });
+  window.addEventListener('load', scrollPageToTop);
 }
 
 function initPage() {
+  scrollPageToTop();
   document.querySelectorAll('.display-tz-label').forEach((el) => { el.textContent = DISPLAY_TZ_LABEL; });
   clearResponseHistory();
   setDefaultFeedbackDateFilter();
@@ -177,6 +189,7 @@ bindTooltips();
 bindConfirmEvents();
 bindHeaderEvents();
 bindMaintenanceEvents();
+bindRangeCheckEvents();
 bindRtpTableEvents();
 bindFeedbackEvents();
 bindDashboardDelegation();

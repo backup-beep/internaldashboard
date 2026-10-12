@@ -24,6 +24,7 @@ function pushDrill(frame) {
   isDiffVisible = false;
   isMaintenanceVisible = false;
   isUserGameplayVisible = false;
+  isRangeVisible = false;
   renderDrillView();
 }
 
