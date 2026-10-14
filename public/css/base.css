@@ -174,8 +174,8 @@ h1 {
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
-}
 
+  
 .nav-btn {
   display: inline-flex;
   align-items: center;
