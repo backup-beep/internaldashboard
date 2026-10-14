@@ -169,12 +169,6 @@ function renderMaintenanceTable() {
 }
 
 async function loadMaintenanceSettings() {
-  if (isDemoMode()) {
-    maintenanceSettingsData = getDemoMaintenanceSettings();
-    maintenanceLoaded = true;
-    renderMaintenanceTable();
-    return;
-  }
   const btn = $('maintenanceReloadBtn');
   if (btn) btn.disabled = true;
   if (!maintenanceLoaded) setHtml('maintenanceTableWrap', skeletonHtml(3));
@@ -282,17 +276,6 @@ async function saveMaintenanceSetting({ isOn, type, startValue = null, endValue 
     startTime: isOn ? startValue : null,
     endTime: isOn ? endValue : null,
   };
-
-  if (isDemoMode()) {
-    maintenanceSettingsData = maintenanceSettingsData.map((row) => {
-      if (String(apiField(row, 'maintenanceType')) !== type) return row;
-      return { ...row, ...body, updatedBy: 'demo', lastUpdatedAt: new Date().toISOString() };
-    });
-    renderMaintenanceTable();
-    clearMaintenanceForm();
-    showToast('Demo maintenance saved for ' + type);
-    return;
-  }
 
   const buttons = [$('maintSaveBtn'), $('maintClearBtn')];
   buttons.forEach((b) => { if (b) b.disabled = true; });

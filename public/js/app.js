@@ -31,14 +31,6 @@ function bindHeaderEvents() {
   });
   $('refreshPageBtn').addEventListener('click', () => window.location.reload());
   $('pauseRefreshBtn').addEventListener('click', () => toggleRefreshPaused());
-  $('dataSource').addEventListener('change', () => {
-    resetDrillAndChart();
-    clearLiveSamples();
-    resetSyncInfo();
-    resetRefreshTimer();
-    if (isDemoMode()) clearResponseHistory();
-    loadData(false);
-  });
   $('responseHistory').addEventListener('change', () => {
     resetDrillAndChart();
     showHistoryAt(Number($('responseHistory').value));
@@ -75,8 +67,17 @@ function bindDashboardDelegation() {
       if (!isDrillLoading) openOwnerTransactions(ownerTx.dataset.ownerTx);
       return;
     }
+    const ownerTxUser = e.target.closest('tr[data-owner-tx-account]');
+    if (ownerTxUser && !e.target.closest('button, a, input, select, label, textarea')) {
+      if (!isDrillLoading) openOwnerTransactionDetail(ownerTxUser.getAttribute('data-owner-tx-account') || '');
+      return;
+    }
     if (e.target.closest('[data-nav="user-gameplay"]')) {
       openUserGameplayPage();
+      return;
+    }
+    if (e.target.closest('[data-nav="range"]')) {
+      openRangePage();
       return;
     }
     const gpSort = e.target.closest('[data-gp-sort]');
@@ -153,6 +154,10 @@ function bindWindowEvents() {
       closeSpinJsonModal();
       return;
     }
+    if (!$('rangeDayGamesModal')?.classList.contains('hidden')) {
+      closeRangeDayModal();
+      return;
+    }
     const typing = e.target.closest?.('input, select, textarea');
     if (!typing && drillStack.length && !isDrillLoading) closeDrillFrame();
   });
@@ -174,6 +179,9 @@ function bindWindowEvents() {
 }
 
 function initPage() {
+  if (typeof console !== 'undefined') {
+    console.info('[Internal Dashboard] asset build: 20261013-owner-tx (grouped owner transactions + user drill-down)');
+  }
   scrollPageToTop();
   document.querySelectorAll('.display-tz-label').forEach((el) => { el.textContent = DISPLAY_TZ_LABEL; });
   clearResponseHistory();

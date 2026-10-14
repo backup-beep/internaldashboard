@@ -9,10 +9,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/dashboard.css" />
-  <link rel="stylesheet" href="css/user-gameplay.css" />
-  <link rel="stylesheet" href="css/maintenance.css" />
+  <link rel="stylesheet" href="css/base.css?v=20261013-owner-tx" />
+  <link rel="stylesheet" href="css/dashboard.css?v=20261015-game-win-loss" />
+  <link rel="stylesheet" href="css/user-gameplay.css?v=20261013-owner-tx" />
+  <link rel="stylesheet" href="css/maintenance.css?v=20261013-owner-tx" />
 </head>
 <body>
   <div class="wrap">
@@ -50,7 +50,6 @@
         </nav>
 
         <div class="status-cluster">
-          <span class="demo-pill hidden" id="demoPill" data-tip="Sample data from demo-data.js — no API calls">Demo data</span>
           <div class="sync" id="statusPill" data-state="idle" role="status" aria-live="polite">
             <span class="dot" id="connDot"></span>
             <span class="sync-text">
@@ -70,13 +69,6 @@
 
       <div class="controls-bar">
         <div class="control-group">
-          <label class="field" id="dataSourceField">
-            <span>Source</span>
-            <select id="dataSource">
-              <option value="api">Live API</option>
-              <option value="demo">Demo (local only)</option>
-            </select>
-          </label>
           <label class="field field-history" id="historyField">
             <span>Response history</span>
             <select id="responseHistory" disabled>
@@ -163,7 +155,7 @@
               <div class="panel-head">
                 <div>
                   <h2>Cash flow</h2>
-                  <p class="panel-sub">Summary totals · player cash and owner coin movements are kept separate</p>
+                  <p class="panel-sub">Today’s player recharge & redeem (dashboard time zone)</p>
                 </div>
               </div>
               <div id="cashflowChart"></div>
@@ -295,6 +287,10 @@
                 <span class="row-count" id="feedbackFilteredAvgRating">Avg —</span>
               </h2>
               <div class="filters">
+                <label class="field">
+                  <span>Search</span>
+                  <input type="search" id="feedbackSearch" placeholder="Username, user ID, message…" autocomplete="off" />
+                </label>
                 <label class="field">
                   <span>From</span>
                   <input type="date" id="feedbackDateFrom" />
@@ -578,9 +574,8 @@
               <span class="crumb-current" aria-current="page">Range</span>
             </nav>
             <h2>Date range</h2>
-            <p class="card-sub">Daily stats for the dates you pick, plus each game’s spin count in that range.</p>
+            <p class="card-sub">Past days: all fields from daily_stats (after the nightly job). Today: logins and deleted from daily_stats; spins, bet/win, recharge/redeem, new accounts, and per-game spins are live.</p>
           </div>
-          <div class="stat-grid range-totals" id="rangeStats"></div>
         </div>
         <div class="filters">
           <label class="field">
@@ -593,18 +588,42 @@
           </label>
           <div class="filter-actions">
             <button type="button" id="rangeLoadBtn">Load</button>
-            <button type="button" class="secondary" id="rangeRunBtn">Run stats job</button>
           </div>
         </div>
         <p class="card-sub" id="rangeHint">Pick a from and to date, then load.</p>
         <div class="range-results" id="rangeResults">
+          <div class="range-warn hidden" id="rangeWarning" role="status"></div>
           <p class="range-section hidden" id="rangeDaysLabel">Daily stats</p>
-          <div class="stat-grid" id="rangeDays"></div>
-          <p class="range-section hidden" id="rangeGamesLabel">Spins by game</p>
-          <div class="stat-grid" id="rangeGames"></div>
+          <div id="rangeDays"></div>
         </div>
         <div class="pager-bar" id="rangePager"></div>
       </section>
+
+      <div class="modal hidden" id="rangeDayGamesModal" role="dialog" aria-modal="true" aria-labelledby="rangeDayGamesTitle">
+        <div class="modal-card modal-lg">
+          <div class="modal-head">
+            <div>
+              <h3 id="rangeDayGamesTitle">Spins by game</h3>
+              <p class="modal-meta" id="rangeDayGamesMeta"></p>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="icon-btn" id="rangeDayGamesClose" aria-label="Close" data-tip="Close">✕</button>
+            </div>
+          </div>
+          <div class="modal-body range-day-modal-body">
+            <div class="range-day-modal-toolbar">
+              <p class="range-day-modal-date" id="rangeDayGamesDate"></p>
+              <label class="field range-day-modal-search">
+                <span>Search</span>
+                <input type="search" id="rangeDayGamesSearch" placeholder="Game name…" autocomplete="off" />
+              </label>
+            </div>
+            <div class="range-day-games-scroll" id="rangeDayGamesScroll">
+              <div id="rangeDayGamesTable"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <section class="card hidden" id="maintenanceCard">
         <div class="page-head">
@@ -687,9 +706,9 @@
                 <button type="button" class="seg-btn owner-tx-type-btn" data-owner-type="generated" data-tone="purple">Generated coin</button>
               </div>
             </div>
-            <label class="field">
-              <span>Account</span>
-              <input type="search" id="ownerTxAccount" placeholder="Account name" autocomplete="off" />
+            <label class="field" id="ownerTxAccountField">
+              <span id="ownerTxAccountLabel">Search username</span>
+              <input type="search" id="ownerTxAccount" placeholder="Username" autocomplete="off" />
             </label>
             <label class="field">
               <span>From</span>
@@ -704,7 +723,9 @@
               <button type="button" class="secondary" id="ownerTxClearBtn">Clear</button>
             </div>
           </div>
+          <p class="owner-tx-hint" id="ownerTxHint">Users sorted by latest recharge or redeem. Filter by date to narrow results; Clear removes filters and shows all users (newest activity first).</p>
           <div class="pager-bar" id="ownerTxPager"></div>
+          <div class="hidden stat-grid stat-grid-sm owner-tx-detail-totals" id="ownerTxDetailTotals"></div>
         </div>
         <div class="table-wrap tall" id="drillTableWrap"></div>
         <div class="hidden" id="drillChartWrap">
@@ -745,17 +766,16 @@
     </section>
   </div>
 
-  <script src="js/datetime.js"></script>
-  <script src="js/core.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/demo-data.js"></script>
-  <script src="js/dashboard.js"></script>
-  <script src="js/dashboard-tables.js"></script>
-  <script src="js/drill-down.js"></script>
-  <script src="js/spin-chart.js"></script>
-  <script src="js/user-gameplay.js"></script>
-  <script src="js/maintenance.js"></script>
-  <script src="js/range-check.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/datetime.js?v=20261013-owner-tx"></script>
+  <script src="js/core.js?v=20261013-owner-tx"></script>
+  <script src="js/charts.js?v=20261013-owner-tx"></script>
+  <script src="js/dashboard.js?v=20261015-login-daily-stats"></script>
+  <script src="js/dashboard-tables.js?v=20261013-owner-tx"></script>
+  <script src="js/drill-down.js?v=20261013-owner-tx"></script>
+  <script src="js/spin-chart.js?v=20261013-owner-tx"></script>
+  <script src="js/user-gameplay.js?v=20261013-owner-tx"></script>
+  <script src="js/maintenance.js?v=20261013-owner-tx"></script>
+  <script src="js/range-check.js?v=20261015-game-win-loss"></script>
+  <script src="js/app.js?v=20261013-daily-kpi"></script>
 </body>
 </html>

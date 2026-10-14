@@ -48,8 +48,7 @@ function pushResponseHistory(response, fingerprint) {
 function updateHistoryDropdown() {
   const sel = $('responseHistory');
   const hasHistory = responseHistory.length > 0;
-  sel.disabled = !hasHistory || isDemoMode();
-  show($('historyField'), !isDemoMode());
+  sel.disabled = !hasHistory;
 
   const html = hasHistory
     ? responseHistory.map((entry, i) =>
@@ -70,15 +69,14 @@ function showHistoryAt(index) {
   $('responseHistory').value = String(historyViewIndex);
 }
 
-/** The summary the Overview should show: the selected history entry, else the latest (or demo) data. */
+/** The summary the Overview should show: the selected history entry, else the latest API data. */
 function currentSummaryResponse() {
-  if (isDemoMode()) return DEMO_SUMMARY;
   return responseHistory[historyViewIndex]?.response || lastSummaryJson;
 }
 
 // ---- Summary loading ----
 
-// Loads the internal summary (API or demo) and drives the auto-refresh countdown.
+// Loads the internal summary from the API and drives the auto-refresh countdown.
 
 const REFRESH_INTERVAL_SEC = 20;
 
@@ -91,12 +89,7 @@ let isRefreshPaused = false;
 let isTabHidden = document.hidden;
 
 function updateDataSourceUi() {
-  const demo = isDemoMode();
-  show($('dataSourceField'), isLocalDevHost());
-  show($('demoPill'), demo);
-  setHtml('subtitle', demo
-    ? 'Demo mode — local sample data, no API calls'
-    : 'Source <code>' + escHtml(apiUrl(INTERNAL_API + '/summary')) + '</code> · auto-refresh ' + REFRESH_INTERVAL_SEC + 's');
+  setHtml('subtitle', 'Source <code>' + escHtml(apiUrl(INTERNAL_API + '/summary')) + '</code> · auto-refresh ' + REFRESH_INTERVAL_SEC + 's');
   updateHistoryDropdown();
   updatePauseButtonUi();
   updateDiffPanel();
@@ -183,7 +176,6 @@ function noteSync(changed, result) {
 function syncState() {
   const { updatedAt, checkedAt, unchanged, error } = syncInfo;
   const updated = updatedAt ? 'Updated ' + relativeTime(updatedAt) : 'No data yet';
-  if (isDemoMode()) return ['ok', 'Demo', updated + ' · sample data'];
   if (isSummaryLoading) return ['busy', 'Updating', lastSummaryJson ? 'Checking for changes…' : 'Loading summary…'];
   if (error) {
     const retry = isRefreshPaused || isTabHidden ? 'auto-refresh paused' : 'retry in ' + secondsLeft + 's';
@@ -208,7 +200,7 @@ function renderSyncStatus() {
     error ? 'Last refresh failed: ' + error.split('\n')[0] : '',
     updatedAt ? 'Data changed: ' + formatDateTime(updatedAt) : 'No data loaded yet',
     checkedAt ? 'Last check: ' + formatDateTime(checkedAt) + (result ? ' — ' + result : '') : '',
-    isDemoMode() ? 'Demo mode: no API calls' : 'Checks every ' + REFRESH_INTERVAL_SEC + 's with ETag (304 = unchanged, nothing re-rendered)',
+    'Checks every ' + REFRESH_INTERVAL_SEC + 's with ETag (304 = unchanged, nothing re-rendered)',
   ].filter(Boolean).join('\n');
   const pill = $('statusPill');
   if (pill && pill.dataset.tip !== tip) pill.dataset.tip = tip;
@@ -251,7 +243,7 @@ function applySummaryResponse(json, isAutoRefresh, { forceApply = false } = {}) 
 function updatePauseButtonUi() {
   const btn = $('pauseRefreshBtn');
   if (!btn) return;
-  show(btn, !isDemoMode());
+  show(btn, true);
   btn.textContent = isRefreshPaused ? 'Resume' : 'Pause';
   updateControlsHighlight();
 }
@@ -266,21 +258,19 @@ function toggleRefreshPaused() {
 /** Countdown ring: seconds until the next check; click to refresh now. */
 function updateRefreshTimer() {
   const el = $('refreshTimer');
-  const demo = isDemoMode();
-  const paused = !demo && (isRefreshPaused || isTabHidden);
+  const paused = isRefreshPaused || isTabHidden;
   let fraction = secondsLeft / REFRESH_INTERVAL_SEC;
   let label;
   let tip;
-  if (demo) { label = '—'; tip = 'Auto-refresh is off in demo mode'; fraction = 0; }
-  else if (isSummaryLoading) { label = ''; tip = 'Checking for new data…'; fraction = 1; }
+  if (isSummaryLoading) { label = ''; tip = 'Checking for new data…'; fraction = 1; }
   else if (isTabHidden) { label = 'II'; tip = 'Auto-refresh paused while this tab is hidden'; }
   else if (isRefreshPaused) { label = 'II'; tip = 'Auto-refresh paused (' + secondsLeft + 's left) · click to refresh now'; }
   else { label = String(secondsLeft); tip = 'Next check in ' + secondsLeft + 's · click to refresh now'; }
 
-  el.classList.toggle('is-off', demo);
+  el.classList.toggle('is-off', false);
   el.classList.toggle('is-paused', paused);
-  el.classList.toggle('is-busy', !demo && isSummaryLoading);
-  el.disabled = demo || isSummaryLoading;
+  el.classList.toggle('is-busy', isSummaryLoading);
+  el.disabled = isSummaryLoading;
   setText('refreshText', label);
   if (el.dataset.tip !== tip) el.dataset.tip = tip;
   $('refreshBar').style.strokeDashoffset = String(100 - Math.max(0, Math.min(1, fraction)) * 100);
@@ -294,7 +284,7 @@ function resetRefreshTimer() {
 function startRefreshClock() {
   setInterval(() => {
     renderSyncStatus();
-    if (isDemoMode() || isSummaryLoading || isRefreshPaused || isTabHidden) return;
+    if (isSummaryLoading || isRefreshPaused || isTabHidden) return;
     secondsLeft -= 1;
     if (secondsLeft <= 0) {
       loadData(true);
@@ -302,18 +292,6 @@ function startRefreshClock() {
     }
     updateRefreshTimer();
   }, 1000);
-}
-
-function loadDemoData(isAutoRefresh = false) {
-  setError('');
-  clearResponseHistory();
-  pushLiveSample(DEMO_SUMMARY.data);
-  renderDashboard(DEMO_SUMMARY);
-  if (drillStack.length) refreshOpenDrillFromLatest();
-  const time = formatTime(new Date());
-  noteSync(true, 'sample data');
-  if (!isAutoRefresh) showToast('Demo data loaded at ' + time, 'info');
-  updateRefreshTimer();
 }
 
 /** Turn low-level fetch/proxy errors into setup hints for the person running the dashboard. */
@@ -328,8 +306,7 @@ function describeSummaryLoadError(err) {
     return isLocal
       ? ('Cannot reach API.\n\n'
         + '1. .NET backend must run on http://localhost:5036\n'
-        + '2. Double-click start.bat (not python -m http.server)\n'
-        + '3. Or switch Source to Demo to preview without the backend')
+        + '2. Double-click start.bat (not python -m http.server)')
       : ('Cannot reach API.\n\n'
         + 'Dashboard calls https://gamevault222.com/api/ directly.\n'
         + 'Check that the live API is up and CORS allows this site.');
@@ -360,8 +337,6 @@ async function loadApiData(isAutoRefresh = false) {
     // Manual Load always bypasses ETag/304 and browser cache, and always redraws the UI.
     const forceFresh = !isAutoRefresh;
     const result = await fetchSummary({ forceFresh });
-    // Source switched to Demo while this request was in flight: its response no longer applies.
-    if (isDemoMode()) return;
     if (result.notModified) {
       reportUpToDate(isAutoRefresh);
     } else {
@@ -370,7 +345,6 @@ async function loadApiData(isAutoRefresh = false) {
     checkOpenDrillForUpdates();
     resetRefreshTimer();
   } catch (err) {
-    if (isDemoMode()) return;
     const msg = describeSummaryLoadError(err);
     syncInfo.checkedAt = new Date();
     syncInfo.result = 'failed: ' + (err.message || 'error');
@@ -389,12 +363,6 @@ async function loadApiData(isAutoRefresh = false) {
 }
 
 async function loadData(isAutoRefresh = false) {
-  // Demo is synchronous, so switching to it is never blocked by an API request still in flight.
-  if (isDemoMode()) {
-    updateDataSourceUi();
-    loadDemoData(isAutoRefresh);
-    return;
-  }
   if (isSummaryLoading) return;
   updateDataSourceUi();
   await loadApiData(isAutoRefresh);
@@ -581,10 +549,10 @@ function renderDiffSection(section) {
 
 function updateDiffPanel() {
   const btn = $('toggleDiffBtn');
-  const canDiff = !isDemoMode() && responseHistory.length >= 2;
+  const canDiff = responseHistory.length >= 2;
 
   if (btn) {
-    show(btn, !isDemoMode());
+    show(btn, true);
     btn.disabled = !canDiff;
     btn.dataset.tip = canDiff ? 'Compare the latest response with the previous one' : 'Needs two different responses';
   }
@@ -698,7 +666,7 @@ function liveSampleSpan() {
 }
 
 function currentLatestResponse() {
-  return isDemoMode() ? DEMO_SUMMARY : (responseHistory[0]?.response || lastSummaryJson);
+  return responseHistory[0]?.response || lastSummaryJson;
 }
 
 // ---- KPI cards ----
@@ -729,9 +697,11 @@ function buildKpiCards(d, prev, response) {
   const hold = rowHold(whole);
   const rtp = rowRtp(whole);
   const prevWhole = prev?.wholeGameRtp;
-  const recharged = Number(d.totalRecharged || 0);
-  const redeemed = Number(d.totalRedeemed || 0);
-  const net = moneyValue(recharged - redeemed);
+  const statsDate = apiField(d, 'dailyStatsDate', '') || toDateInputValue();
+  const totalSpins = Number(apiField(d, 'todayDailySpinCount', 0));
+  const totalLogins = Number(apiField(d, 'todayDailyLoginCount', 0));
+  const prevSpins = prev ? Number(apiField(prev, 'todayDailySpinCount', 0)) : 0;
+  const prevLogins = prev ? Number(apiField(prev, 'todayDailyLoginCount', 0)) : 0;
   const online = gameUsersCount(totalGameUsersPayload(d));
   const totalUsers = Number(apiField(d, 'totalUsers', 0));
   const games = d.rtpByGame || [];
@@ -782,17 +752,22 @@ function buildKpiCards(d, prev, response) {
       viewAll: action('View all', ' data-explore="games-rtp"', 'All games, sorted by RTP'),
     },
     {
-      label: 'Player net cash',
-      value: signedMoney(net),
-      tone: net >= 0 ? 'up' : 'down',
-      visual: splitBarHtml([
-        { label: 'Recharged', value: recharged, tone: 'up' },
-        { label: 'Redeemed', value: redeemed, tone: 'warn' },
-      ], money, { legend: false }),
-      sub: 'In ' + moneyHtml(recharged, 'up') + ' · out ' + moneyHtml(redeemed, 'warn'),
-      delta: prev ? kpiDelta(net, Number(prev.totalRecharged || 0) - Number(prev.totalRedeemed || 0), money) : '',
-      tip: 'Player recharges minus player redeems',
-      viewAll: action('View all', ' data-nav="user-gameplay"', 'Recharge and redeem for every player'),
+      label: 'Current day spin count',
+      value: fmtInt(totalSpins),
+      tone: 'bet',
+      sub: escHtml(statsDate) + ' · live game_spin_logs',
+      delta: prev ? kpiDelta(totalSpins, prevSpins, fmtInt) : '',
+      tip: 'Current calendar day — live spin count from game_spin_logs (past days on Range use daily_stats)',
+      viewAll: action('View all', ' data-nav="range"', 'Daily stats by date range'),
+    },
+    {
+      label: 'Current day login count',
+      value: fmtInt(totalLogins),
+      tone: 'info',
+      sub: escHtml(statsDate) + ' · daily_stats.total_daily_login_count',
+      delta: prev ? kpiDelta(totalLogins, prevLogins, fmtInt) : '',
+      tip: 'Current calendar day — value from daily_stats for today (updated on each login until the job replaces the row)',
+      viewAll: action('View all', ' data-nav="range"', 'Daily stats by date range'),
     },
     {
       label: 'Online now',
@@ -978,40 +953,25 @@ function renderGamePerformance(d) {
 }
 
 function renderCashflow(d) {
-  const recharged = Number(d.totalRecharged || 0);
-  const redeemed = Number(d.totalRedeemed || 0);
-  const net = moneyValue(recharged - redeemed);
-  const ownerRecharged = Number(apiField(d, 'ownerTotalRecharged', 0));
-  const ownerRedeemed = Number(apiField(d, 'ownerTotalRedeemed', 0));
-  const ratio = (out, inn) => (inn ? ((out / inn) * 100).toFixed(1) + '%' : '—');
+  const recharged = Number(apiField(d, 'todayPlayerRecharged', 0));
+  const redeemed = Number(apiField(d, 'todayPlayerRedeemed', 0));
+  const cashDate = apiField(d, 'playerCashFlowDate', '') || toDateInputValue();
+  const ratio = (num, den) => (den ? ((Number(num) / Number(den)) * 100).toFixed(1) + '%' : '—');
+  const totalFlow = recharged + redeemed;
   const money = (n) => '$' + fmtMoney(n);
-
-  const ownerRow = (label, value, tone, type) => ({
-    label, value, tone,
-    attrs: ' data-owner-tx="' + type + '"',
-    tip: 'Owner ' + label.toLowerCase() + ' $' + fmtMoney(value) + '\nClick to open these transactions',
-  });
 
   setHtml('cashflowChart',
     '<div class="cf-block cf-player">' +
-    '<div class="cf-head"><span>Player cash</span><strong class="val tone-' + (net >= 0 ? 'up' : 'down') + '">' + signedMoney(net) + '</strong><small>net in</small>' +
-    '<button type="button" class="link-btn" data-nav="user-gameplay"' + tipAttr('Per-player recharge / redeem totals (the summary only has overall totals)') + '>Per player →</button></div>' +
+    '<div class="cf-head"><span>Player cash</span><small>' + escHtml(cashDate) + '</small>' +
+    '<button type="button" class="link-btn" data-nav="user-gameplay"' + tipAttr('Per-player recharge / redeem for today or any date range') + '>Per player →</button></div>' +
     splitBarHtml([
       { label: 'Recharged', value: recharged, tone: 'up' },
       { label: 'Redeemed', value: redeemed, tone: 'warn' },
     ], money) +
     '</div>' +
-    '<div class="cf-block cf-owner">' +
-    '<div class="cf-head"><span>Owner coins</span><button type="button" class="link-btn" data-owner-tx="all">All transactions →</button></div>' +
-    barListHtml([
-      ownerRow('Generated', Number(apiField(d, 'ownerTotalGenerated', 0)), 'purple', 'generated'),
-      ownerRow('Recharged', ownerRecharged, 'up', 'recharge'),
-      ownerRow('Redeemed', ownerRedeemed, 'warn', 'redeem'),
-    ], { format: (n) => '$' + fmtCompact(n) }) +
-    '</div>' +
     '<div class="cf-ratios">' +
-    '<span' + tipAttr('Player redeemed ÷ player recharged') + '>Player redeem ratio <b>' + ratio(redeemed, recharged) + '</b></span>' +
-    '<span' + tipAttr('Owner redeemed ÷ owner recharged') + '>Owner redeem ratio <b>' + ratio(ownerRedeemed, ownerRecharged) + '</b></span>' +
+    '<span' + tipAttr('Today player recharged ÷ (recharged + redeemed)') + '>Recharge ratio <b>' + ratio(recharged, totalFlow) + '</b></span>' +
+    '<span' + tipAttr('Today player redeemed ÷ today player recharged') + '>Redeem ratio <b>' + ratio(redeemed, recharged) + '</b></span>' +
     '</div>');
 }
 
@@ -1203,7 +1163,7 @@ function explorerSectionInputs(tab) {
   const table = Object.values(rtpTables).find((t) => t.sectionId === tab);
   if (table) return { wrapId: table.wrapId, selects: [table.filterId, table.statusFilterId].filter(Boolean), searchId: table.searchId };
   if (tab === 'sec-target-rtp') return { wrapId: 'gamesTargetRtpWrap', selects: GAME_TARGET_FILTER_IDS, searchId: '' };
-  if (tab === 'sec-feedbacks') return { wrapId: 'userFeedbacksWrap', selects: [], searchId: '' };
+  if (tab === 'sec-feedbacks') return { wrapId: 'userFeedbacksWrap', selects: [], searchId: 'feedbackSearch' };
   return null;
 }
 
@@ -1280,7 +1240,7 @@ function renderJsonCard() {
 /** Which page is visible. Drill-down wins over diff, which wins over the secondary pages. */
 function getActiveView() {
   if (drillStack.length > 0) return 'drill';
-  if (isDiffVisible && !isDemoMode() && responseHistory.length >= 2) return 'diff';
+  if (isDiffVisible && responseHistory.length >= 2) return 'diff';
   if (isMaintenanceVisible) return 'maintenance';
   if (isUserGameplayVisible) return 'user-gameplay';
   if (isRangeVisible) return 'range';
@@ -1462,6 +1422,10 @@ function setDashboardViewMode() {
   show($('mainDashboard'), view === 'home');
   show($('diffCard'), view === 'diff');
   show($('drillDownCard'), view === 'drill');
+  $('drillDownCard')?.classList.toggle(
+    'drill-owner-tx-layout',
+    view === 'drill' && currentDrillFrame()?.type === 'owner-transactions'
+  );
   show($('maintenanceCard'), view === 'maintenance');
   show($('userGameplayCard'), view === 'user-gameplay');
   show($('rangeCard'), view === 'range');
@@ -1490,5 +1454,5 @@ function updateControlsHighlight() {
   setActive('maintenanceBtn', view === 'maintenance');
   setActive('userGameplayBtn', view === 'user-gameplay');
   setActive('rangeBtn', view === 'range');
-  setActive('pauseRefreshBtn', isRefreshPaused && !isDemoMode());
+  setActive('pauseRefreshBtn', isRefreshPaused);
 }

@@ -145,11 +145,6 @@ function isLocalDevHost() {
   return host === 'localhost' || host === '127.0.0.1';
 }
 
-/** Demo (sample) data is a local development aid only; hosted dashboards always use the API. */
-function isDemoMode() {
-  return isLocalDevHost() && $('dataSource')?.value === 'demo';
-}
-
 function apiOrigin() {
   // Local: same origin → server.py proxy → localhost:5036. Any hosted URL: the live API.
   if (isLocalDevHost()) return window.location.origin;
@@ -310,7 +305,16 @@ function renderTable(containerId, rows, columns, emptyMessage = 'No data.', opti
   }).join('') + '</tr>';
   const body = pageRows.map((row, rowIndex) => {
     const rowClass = options.getRowClass ? options.getRowClass(row) : '';
-    return (rowClass ? '<tr class="' + escAttr(rowClass) + '">' : '<tr>') +
+    const rowAttrs = options.rowAttrs ? options.rowAttrs(row) : null;
+    let tr = '<tr';
+    if (rowClass) tr += ' class="' + escAttr(rowClass) + '"';
+    if (rowAttrs && typeof rowAttrs === 'object') {
+      Object.entries(rowAttrs).forEach(([key, val]) => {
+        if (val != null && val !== '') tr += ' ' + key + '="' + escAttr(String(val)) + '"';
+      });
+    }
+    tr += '>';
+    return tr +
       columns.map((c, i) =>
         '<td' + cellClass[i] + '>' + (c.render ? c.render(row, rowIndex) : escHtml(row[c.key] ?? '')) + '</td>'
       ).join('') +

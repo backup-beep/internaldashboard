@@ -50,7 +50,10 @@ function closeDrillFrame() {
 
 function drillFrameLabel(frame) {
   if (frame.type === 'online-users') return 'Online Users';
-  if (frame.type === 'owner-transactions') return 'Owner Transactions';
+  if (frame.type === 'owner-transactions') {
+    if (frame.view === 'detail' && frame.detailAccount) return frame.detailAccount;
+    return 'Owner Transactions';
+  }
   if (frame.type === 'game-users') return frame.game.gameName || 'Game';
   if (frame.type === 'sessions') return (frame.title || 'User') + ' · Sessions';
   return 'Spin graph';
@@ -88,6 +91,7 @@ function renderDrillView() {
   show($('drillTableWrap'), frame.type !== 'spins');
   show($('drillChartWrap'), frame.type === 'spins');
   show($('drillOwnerTxToolbar'), frame.type === 'owner-transactions');
+  $('drillTableWrap')?.classList.toggle('tall', frame.type !== 'owner-transactions');
   if (frame.type === 'spins') clearTablePager('drillTableWrap');
   syncDrillUpdateButton();
 
@@ -279,7 +283,7 @@ async function fetchDrillFrameRows(frame) {
  */
 async function checkOpenDrillForUpdates() {
   const frame = currentDrillFrame();
-  if (!frame || isDemoMode() || isDrillLoading || isDrillUpdateChecking) return;
+  if (!frame || isDrillLoading || isDrillUpdateChecking) return;
   if (frame.type !== 'sessions' && frame.type !== 'game-users') return;
 
   isDrillUpdateChecking = true;
@@ -351,12 +355,7 @@ async function openUserSessions(userRow) {
   showDrillLoading('Loading sessions for ' + (userRow.username || 'user') + '…');
 
   try {
-    let sessions = userRow.sessions;
-    if (!isDemoMode()) {
-      sessions = await fetchUserSessions(userRow.userId);
-    } else if (!Array.isArray(sessions)) {
-      sessions = [];
-    }
+    const sessions = await fetchUserSessions(userRow.userId);
     pushDrill({ type: 'sessions', title: userRow.username, sessions, source: { userId: userRow.userId } });
   } catch (err) {
     renderDrillView();
@@ -373,12 +372,7 @@ async function openGameUsers(gameRow) {
   showDrillLoading('Loading users for ' + (gameRow.gameName || 'game') + '…');
 
   try {
-    let users = gameRow.users;
-    if (!isDemoMode()) {
-      users = await fetchGameUsers(gameRow.gameId);
-    } else if (!Array.isArray(users)) {
-      users = [];
-    }
+    const users = await fetchGameUsers(gameRow.gameId);
     pushDrill({ type: 'game-users', game: { ...gameRow, users } });
   } catch (err) {
     renderDrillView();
@@ -395,12 +389,7 @@ async function openSessionGraph(session) {
   showDrillLoading('Loading session spins…');
 
   try {
-    let spinLogs = session.spinLogs;
-    if (!isDemoMode()) {
-      spinLogs = await fetchSessionSpins(session.sessionId);
-    } else if (!Array.isArray(spinLogs)) {
-      spinLogs = [];
-    }
+    const spinLogs = await fetchSessionSpins(session.sessionId);
     pushDrill({ type: 'spins', session: { ...session, spinLogs } });
   } catch (err) {
     renderDrillView();
@@ -456,11 +445,56 @@ function handleDrillClick(button) {
 
 const OWNER_TX_PAGE_SIZE = 25;
 
-async function fetchOwnerTransactions({ type = 'all', page = 1, pageSize = OWNER_TX_PAGE_SIZE, account = '', from = '', to = '' } = {}) {
-  if (isDemoMode()) {
-    return getDemoOwnerTransactions({ type, page, pageSize, account });
-  }
+/** Today in the dashboard display zone (default owner-tx filter). */
+function ownerTxDefaultDayRange() {
+  const today = toDateInputValue();
+  return { from: today, to: today };
+}
 
+function applyOwnerTxDayInputs(from, to) {
+  setInputValue('ownerTxFrom', from || '');
+  setInputValue('ownerTxTo', to || '');
+}
+
+async function fetchOwnerTransactions({
+  type = 'all',
+  page = 1,
+  pageSize = OWNER_TX_PAGE_SIZE,
+  account = '',
+  from = '',
+  to = '',
+  exact = false,
+} = {}) {
+  const params = new URLSearchParams();
+  params.set('type', type || 'all');
+  params.set('page', String(page || 1));
+  params.set('pageSize', String(pageSize || OWNER_TX_PAGE_SIZE));
+  if (account) params.set('account', account);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (exact) params.set('exact', 'true');
+
+  const json = await fetchApiJson('/owner-transactions?' + params.toString());
+  const data = json.data || {};
+  return {
+    items: data.items || data.Items || [],
+    totalCount: Number(apiField(data, 'totalCount', 0)),
+    page: Number(apiField(data, 'page', page)),
+    pageSize: Number(apiField(data, 'pageSize', pageSize)),
+    type: data.type || data.Type || type,
+    summaryTotalRecharge: apiField(data, 'summaryTotalRecharge', null),
+    summaryTotalRedeem: apiField(data, 'summaryTotalRedeem', null),
+  };
+}
+
+async function fetchOwnerTransactionUsers({
+  type = 'all',
+  page = 1,
+  pageSize = OWNER_TX_PAGE_SIZE,
+  account = '',
+  from = '',
+  to = '',
+} = {}) {
   const params = new URLSearchParams();
   params.set('type', type || 'all');
   params.set('page', String(page || 1));
@@ -469,7 +503,7 @@ async function fetchOwnerTransactions({ type = 'all', page = 1, pageSize = OWNER
   if (from) params.set('from', from);
   if (to) params.set('to', to);
 
-  const json = await fetchApiJson('/owner-transactions?' + params.toString());
+  const json = await fetchApiJson('/owner-transaction-users?' + params.toString());
   const data = json.data || {};
   return {
     items: data.items || data.Items || [],
@@ -505,6 +539,17 @@ function syncOwnerTxToolbar(frame) {
   setInputValue('ownerTxAccount', frame.account || '');
   setInputValue('ownerTxFrom', frame.from || '');
   setInputValue('ownerTxTo', frame.to || '');
+  const view = frame.view || 'users';
+  show($('ownerTxAccountField'), view === 'users');
+  show($('ownerTxDetailTotals'), view === 'detail');
+  setText('ownerTxAccountLabel', view === 'users' ? 'Search username' : 'Username');
+  const fromLabel = $('ownerTxFrom')?.closest('.field')?.querySelector('span');
+  const toLabel = $('ownerTxTo')?.closest('.field')?.querySelector('span');
+  if (fromLabel) fromLabel.textContent = view === 'detail' ? 'From (optional)' : 'From';
+  if (toLabel) toLabel.textContent = view === 'detail' ? 'To (optional)' : 'To';
+  document.querySelectorAll('.owner-tx-type-btn[data-owner-type="generated"]').forEach((btn) => {
+    show(btn, view !== 'detail');
+  });
 }
 
 function ownerTxTotalPages(frame) {
@@ -595,23 +640,101 @@ function ownerTxBalanceCell(row, key) {
   return ownerTxKind(row) === 'generated' ? EMPTY_CELL_HTML : ('$' + fmtMoney(row[key]));
 }
 
+function renderOwnerTxDetailTotals(frame) {
+  const el = $('ownerTxDetailTotals');
+  if (!el || frame.view !== 'detail') {
+    show($('ownerTxDetailTotals'), false);
+    return;
+  }
+  const recharge = frame.summaryTotalRecharge;
+  const redeem = frame.summaryTotalRedeem;
+  setHtml(el, [
+    '<div class="stat"><span>Total recharge</span><strong class="tone-up">$' + fmtMoney(recharge ?? 0) + '</strong></div>',
+    '<div class="stat"><span>Total redeem</span><strong class="tone-warn">$' + fmtMoney(redeem ?? 0) + '</strong></div>',
+  ].join(''));
+  show(el, true);
+}
+
+function normalizeOwnerTxUser(r) {
+  return {
+    account: apiField(r, 'account', ''),
+    totalRecharge: apiField(r, 'totalRecharge', 0),
+    totalRedeem: apiField(r, 'totalRedeem', 0),
+    rechargeCount: apiField(r, 'rechargeCount', 0),
+    redeemCount: apiField(r, 'redeemCount', 0),
+  };
+}
+
+const OWNER_TX_USER_COLUMNS = [
+  {
+    label: 'Username',
+    render: (r) => r.account ? '<span class="cell-user">' + escHtml(r.account) + '</span>' : EMPTY_CELL_HTML,
+  },
+  { label: 'Total Recharge', align: 'right', render: (r) => moneyHtml(r.totalRecharge, 'up') },
+  { label: 'Total Redeem', align: 'right', render: (r) => moneyHtml(r.totalRedeem, 'warn') },
+  { label: 'Recharge Count', align: 'right', render: (r) => fmtInt(r.rechargeCount) },
+  { label: 'Redeem Count', align: 'right', render: (r) => fmtInt(r.redeemCount) },
+];
+
 function renderOwnerTransactionsDrill(frame) {
   syncOwnerTxToolbar(frame);
   renderOwnerTxPager(frame);
-  const total = Number(frame.totalCount || 0);
-  setDrillHeader(
-    (frame.txType || 'all') === 'generated' ? 'Owner Generated Coins' : 'Owner Recharge & Redeem',
-    frame.loading ? 'Loading…' : countLabel(total, 'record')
-  );
+  renderOwnerTxDetailTotals(frame);
 
-  if (frame.loading && !(frame.items || []).length) {
+  const view = frame.view || ((frame.txType || 'all') === 'generated' ? 'generated' : 'users');
+  const total = Number(frame.totalCount || 0);
+  const unit = view === 'users' ? 'user' : 'transaction';
+  let title = 'Owner Recharge & Redeem';
+  if (view === 'generated') title = 'Owner Generated Coins';
+  else if (view === 'detail') title = (frame.detailAccount || 'User') + ' · Transactions';
+
+  setDrillHeader(title, frame.loading ? 'Loading…' : countLabel(total, unit));
+
+  const rows = view === 'users'
+    ? (frame.userItems || []).map(normalizeOwnerTxUser)
+    : (frame.items || []).map(normalizeOwnerTx);
+  const columns = view === 'users'
+    ? OWNER_TX_USER_COLUMNS
+    : (view === 'detail' ? OWNER_TX_DETAIL_COLUMNS : OWNER_TX_COLUMNS);
+  const emptyMsg = view === 'users' ? 'No users match these filters.' : 'No records match these filters.';
+
+  if (frame.loading && !rows.length) {
     setHtml('drillTableWrap', skeletonHtml(10));
     return;
   }
-  renderTable('drillTableWrap', (frame.items || []).map(normalizeOwnerTx), OWNER_TX_COLUMNS, 'No records match these filters.');
+
+  const tableOpts = view === 'users'
+    ? {
+      getRowClass: () => 'is-clickable',
+      rowAttrs: (r) => (r.account ? { 'data-owner-tx-account': r.account } : null),
+    }
+    : {};
+
+  renderTable('drillTableWrap', rows, columns, emptyMsg, tableOpts);
 }
 
 const OWNER_TX_TONES = { recharge: 'up', redeem: 'warn', generated: 'purple' };
+
+const OWNER_TX_DETAIL_COLUMNS = [
+  { label: 'Date', render: (r) => renderTimezoneDateHtml(r.date) },
+  { label: 'Type', render: (r) => badgeHtml(String(r.type || '') || '—', OWNER_TX_TONES[ownerTxKind(r)] || 'up') },
+  { label: 'Before', align: 'right', render: (r) => ownerTxBalanceCell(r, 'before') },
+  { label: 'Amount', align: 'right', render: (r) => moneyHtml(r.amount, OWNER_TX_TONES[ownerTxKind(r)] || 'up') },
+  { label: 'After', align: 'right', render: (r) => ownerTxBalanceCell(r, 'after') },
+  {
+    label: 'Current coin',
+    align: 'right',
+    render: (r) => (r.currentCoin == null || r.currentCoin === '') ? EMPTY_CELL_HTML : ('$' + fmtMoney(r.currentCoin)),
+  },
+  {
+    label: 'Game ID',
+    render: (r) => r.gameId ? '<span class="cell-id game-id">' + escHtml(r.gameId) + '</span>' : EMPTY_CELL_HTML,
+  },
+  { label: 'Actor', key: 'actor' },
+  { label: 'Cashier', key: 'cashier' },
+  { label: 'Ticket', key: 'ticket' },
+  { label: 'Remark', key: 'remark' },
+];
 
 const OWNER_TX_COLUMNS = [
   { label: 'Type', render: (r) => badgeHtml(String(r.type || '') || '—', OWNER_TX_TONES[ownerTxKind(r)] || 'up') },
@@ -638,49 +761,89 @@ const OWNER_TX_COLUMNS = [
   { label: 'Remark', key: 'remark' },
 ];
 
+function ownerTxListView(frame, txType) {
+  if (frame.view === 'detail') return 'detail';
+  return txType === 'generated' ? 'generated' : 'users';
+}
+
 async function loadOwnerTransactionsPage(overrides = {}) {
   const frame = currentDrillFrame();
   if (!isOwnerTxFrame(frame) || isDrillLoading) return;
 
   const parsedPage = parseInt(String(overrides.page ?? frame.page ?? 1), 10);
+  const nextTxType = overrides.txType ?? frame.txType ?? 'all';
   const next = {
-    txType: overrides.txType ?? frame.txType ?? 'all',
+    txType: nextTxType,
     page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
     pageSize: Number(overrides.pageSize ?? frame.pageSize ?? OWNER_TX_PAGE_SIZE) || OWNER_TX_PAGE_SIZE,
-    account: overrides.account ?? frame.account ?? '',
-    from: overrides.from ?? frame.from ?? '',
-    to: overrides.to ?? frame.to ?? '',
+    account: 'account' in overrides ? overrides.account : (frame.account ?? ''),
+    from: 'from' in overrides ? overrides.from : (frame.from ?? ''),
+    to: 'to' in overrides ? overrides.to : (frame.to ?? ''),
   };
+  Object.assign(frame, {
+    txType: next.txType,
+    account: next.account,
+    from: next.from,
+    to: next.to,
+  });
+  syncOwnerTxToolbar(frame);
+  const view = ownerTxListView(frame, next.txType);
+  if (view === 'detail') next.account = '';
 
   isDrillLoading = true;
   frame.loading = true;
   setText('drillMeta', 'Loading…');
   $('drillTableWrap')?.classList.add('is-loading');
   try {
-    const data = await fetchOwnerTransactions({
-      type: next.txType,
-      page: next.page,
-      pageSize: next.pageSize,
-      account: next.account,
-      from: next.from,
-      to: next.to,
-    });
+    let data;
+    if (view === 'users') {
+      data = await fetchOwnerTransactionUsers({
+        type: next.txType,
+        page: next.page,
+        pageSize: next.pageSize,
+        account: next.account,
+        from: next.from,
+        to: next.to,
+      });
+    } else {
+      const detailAccount = frame.detailAccount || '';
+      data = await fetchOwnerTransactions({
+        type: next.txType,
+        page: next.page,
+        pageSize: next.pageSize,
+        account: view === 'detail' ? detailAccount : next.account,
+        from: next.from,
+        to: next.to,
+        exact: view === 'detail',
+      });
+    }
     const totalCount = Number(data.totalCount || 0);
     const pageSize = Number(data.pageSize || next.pageSize) || OWNER_TX_PAGE_SIZE;
     const totalPages = pageCount(totalCount, pageSize);
     const page = Math.min(Number(data.page || next.page) || 1, totalPages);
     Object.assign(frame, {
+      view,
       txType: data.type || next.txType,
       page,
       pageSize,
       totalPages,
-      account: next.account,
+      account: view === 'users' ? next.account : '',
       from: next.from,
       to: next.to,
-      items: data.items,
       totalCount,
       loading: false,
     });
+    if (view === 'users') {
+      frame.userItems = data.items;
+      frame.items = [];
+      frame.summaryTotalRecharge = null;
+      frame.summaryTotalRedeem = null;
+    } else {
+      frame.items = data.items;
+      frame.userItems = [];
+      frame.summaryTotalRecharge = data.summaryTotalRecharge;
+      frame.summaryTotalRedeem = data.summaryTotalRedeem;
+    }
     renderDrillView();
   } catch (err) {
     frame.loading = false;
@@ -692,22 +855,52 @@ async function loadOwnerTransactionsPage(overrides = {}) {
   }
 }
 
-/** `txType`: all | recharge | redeem | generated (cash-flow rows open the matching type). */
-async function openOwnerTransactions(txType = 'all') {
-  if (isDrillLoading) return;
+async function openOwnerTransactionDetail(account) {
+  const frame = currentDrillFrame();
+  if (!isOwnerTxFrame(frame) || isDrillLoading || !account) return;
+  const from = frame.from || '';
+  const to = frame.to || '';
+  const txType = frame.txType === 'generated' ? 'all' : (frame.txType || 'all');
+  applyOwnerTxDayInputs(from, to);
+  setOwnerTxTypeButtons(txType);
   pushDrill({
     type: 'owner-transactions',
+    view: 'detail',
+    detailAccount: account,
     txType,
     page: 1,
     pageSize: OWNER_TX_PAGE_SIZE,
     account: '',
-    from: '',
-    to: '',
+    from,
+    to,
     items: [],
+    userItems: [],
     totalCount: 0,
     loading: true,
   });
-  await loadOwnerTransactionsPage({ page: 1, txType });
+  await loadOwnerTransactionsPage({ page: 1, txType, from, to });
+}
+
+/** `txType`: all | recharge | redeem | generated (cash-flow rows open the matching type). */
+async function openOwnerTransactions(txType = 'all') {
+  if (isDrillLoading) return;
+  const { from, to } = ownerTxDefaultDayRange();
+  applyOwnerTxDayInputs(from, to);
+  pushDrill({
+    type: 'owner-transactions',
+    view: txType === 'generated' ? 'generated' : 'users',
+    txType,
+    page: 1,
+    pageSize: OWNER_TX_PAGE_SIZE,
+    account: '',
+    from,
+    to,
+    items: [],
+    userItems: [],
+    totalCount: 0,
+    loading: true,
+  });
+  await loadOwnerTransactionsPage({ page: 1, txType, from, to });
 }
 
 function bindOwnerTransactionEvents() {
@@ -716,11 +909,21 @@ function bindOwnerTransactionEvents() {
     loadOwnerTransactionsPage({ page: 1, txType: getSelectedOwnerTxType(), ...readOwnerTxFilterInputs() });
   });
   $('ownerTxClearBtn')?.addEventListener('click', () => {
+    const frame = currentDrillFrame();
+    if (!isOwnerTxFrame(frame)) return;
+    const reset = {
+      page: 1,
+      txType: 'all',
+      account: '',
+      from: '',
+      to: '',
+    };
     setOwnerTxTypeButtons('all');
+    applyOwnerTxDayInputs('', '');
     setInputValue('ownerTxAccount', '');
-    setInputValue('ownerTxFrom', '');
-    setInputValue('ownerTxTo', '');
-    loadOwnerTransactionsPage({ page: 1, txType: 'all', account: '', from: '', to: '' });
+    Object.assign(frame, reset);
+    syncOwnerTxToolbar(frame);
+    loadOwnerTransactionsPage(reset);
   });
   document.querySelectorAll('.owner-tx-type-btn').forEach((btn) => {
     btn.addEventListener('click', () => {

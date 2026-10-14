@@ -225,18 +225,6 @@ button.nav-btn.is-active {
   flex-wrap: wrap;
 }
 
-.demo-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
-  font-size: 0.76rem;
-  white-space: nowrap;
-}
-
 /* Sync status: state + "updated … ago" + countdown ring (click = refresh now). */
 .sync {
   display: inline-flex;
@@ -365,15 +353,6 @@ button.nav-btn.is-active {
 
 @keyframes pulse {
   50% { opacity: 0.35; }
-}
-
-.demo-pill {
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--c-warn);
-  border-color: rgba(255, 183, 77, 0.45);
-  background: rgba(255, 183, 77, 0.1);
 }
 
 .controls-bar {
@@ -1154,6 +1133,7 @@ tbody tr:hover td.col-action { background: #172433; }
 
 .toast.visible { opacity: 1; transform: none; }
 .toast[data-tone="info"] { border-color: rgba(144, 202, 249, 0.35); background: #15212f; color: #d5e9fb; }
+.toast[data-tone="warn"] { border-color: rgba(255, 193, 99, 0.45); background: #2a2214; color: #ffe8c2; }
 .toast[data-tone="err"] { border-color: rgba(240, 127, 127, 0.45); background: #2c1717; color: #ffd0d0; }
 
 /* ---- Pager ---- */

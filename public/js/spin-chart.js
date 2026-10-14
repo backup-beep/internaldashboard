@@ -941,10 +941,6 @@ async function openSpinJsonFromTable(spinLogId, sourceIndex) {
   const row = userGameplaySpinsData[Number(sourceIndex)] || null;
   const meta = { ...buildSpinMeta(row), id: spinLogId || apiField(row, 'id', '') };
 
-  if (isDemoMode()) {
-    showSpinJsonModal(meta, row?._demoJson || null);
-    return;
-  }
   if (!spinLogId) {
     showSpinJsonModal(meta, null);
     return;
@@ -963,10 +959,6 @@ async function openChartSpinJson(spin) {
 
   if (!id || !spinHasJson(spin)) {
     showSpinJsonModal(meta, null);
-    return;
-  }
-  if (isDemoMode()) {
-    showSpinJsonModal(meta, getDemoChartSpinJson(spin, meta));
     return;
   }
   await fetchAndShowSpinJson(id, meta);

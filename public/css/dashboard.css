@@ -4,7 +4,7 @@
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0.75rem;
   margin-bottom: 0.85rem;
 }
@@ -169,7 +169,8 @@ button.insight:hover:not(:disabled) { background: color-mix(in srgb, var(--tone)
   align-self: stretch;
 }
 
-.analytics-side .panel-feedback { flex: 1; }
+.analytics-side .panel-cash { flex-shrink: 0; }
+.analytics-side .panel-feedback { flex: 1; min-height: 0; }
 
 .analytics-side .panel { padding: 0.75rem 0.9rem 0.8rem; }
 .analytics-side .panel-head { margin-bottom: 0.55rem; }
@@ -249,6 +250,8 @@ button.insight:hover:not(:disabled) { background: color-mix(in srgb, var(--tone)
 .cf-head strong { font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .cf-head small { font-size: 0.72rem; color: var(--muted); }
 .cf-head .link-btn { margin-left: auto; }
+.cf-head-sub { margin-bottom: 0.45rem; }
+.cf-head-sub > span { font-size: 0.62rem; }
 
 .cf-ratios {
   display: flex;
@@ -271,7 +274,42 @@ button.insight:hover:not(:disabled) { background: color-mix(in srgb, var(--tone)
 #onlineChart > .chart-note { margin-bottom: 0.75rem; }
 
 /* Player sentiment */
-.fb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; margin-bottom: 0.7rem; }
+#feedbackChart {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#feedbackChart .bar-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 0;
+  min-height: 0;
+  margin-top: 0.15rem;
+}
+
+#feedbackChart .bar-row {
+  flex: 1;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0.35rem 0.35rem;
+}
+
+#feedbackChart .bar-track { height: 8px; }
+
+#feedbackChart > .empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 8rem;
+}
+
+.fb-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; margin-bottom: 0.35rem; flex-shrink: 0; }
 .fb-head strong { font-size: 1.55rem; font-weight: 800; line-height: 1; }
 .fb-head small { flex-basis: 100%; font-size: 0.72rem; color: var(--muted); }
 .stars { font-size: 0.95rem; letter-spacing: 0.06em; color: var(--c-gold); }
@@ -311,16 +349,6 @@ button.insight:hover:not(:disabled) { background: color-mix(in srgb, var(--tone)
 
 #rangeCard .page-head { align-items: stretch; }
 
-.range-totals {
-  flex: 1 1 26rem;
-  max-width: 40rem;
-  margin: 0 0 0 auto;
-  grid-template-columns: 1fr 1fr;
-  align-self: center;
-}
-
-.range-totals:empty { display: none; }
-
 #rangeCard .filters > .field:has(input[type="date"]) {
   flex: 0 0 12rem;
 }
@@ -340,6 +368,20 @@ button.insight:hover:not(:disabled) { background: color-mix(in srgb, var(--tone)
   background: rgba(0, 0, 0, 0.12);
 }
 
+.range-warn {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--c-warn) 45%, transparent);
+  background: color-mix(in srgb, var(--c-warn) 12%, transparent);
+  color: #ffe8c2;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.range-warn:empty,
+.range-warn.hidden { display: none; }
+
 .range-results .stat-grid:last-child { margin-bottom: 0; }
 
 .range-section {
@@ -352,15 +394,18 @@ button.insight:hover:not(:disabled) { background: color-mix(in srgb, var(--tone)
 }
 
 
-#rangeDays,
-#rangeGames {
+#rangeDays {
+  display: block;
   align-content: start;
 }
 
-#rangeDays { display: block; }
-#rangeGames { display: grid; }
+.range-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 0.85rem;
+  -webkit-overflow-scrolling: touch;
+}
 
-.range-table { margin: 0 0 0.85rem; }
+.range-table { margin: 0; min-width: 52rem; }
 
 .range-table th,
 .range-table td { padding: 0.28rem 0.7rem; }
@@ -464,8 +509,138 @@ button.insight:hover:not(:disabled) { background: color-mix(in srgb, var(--tone)
   border-color: color-mix(in srgb, var(--tone) 55%, transparent);
 }
 
-#rangeGames {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+#rangeDayGamesModal .modal-card {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 96vw);
+  height: auto;
+  max-height: min(88vh, 900px);
+  overflow: hidden;
+}
+
+#rangeDayGamesModal .modal-head {
+  flex-shrink: 0;
+}
+
+#rangeDayGamesModal .range-day-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.range-day-modal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  flex-shrink: 0;
+  padding: 0.65rem 1.15rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: relative;
+  z-index: 2;
+}
+
+.range-day-modal-date {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.range-day-modal-search {
+  flex: 1 1 14rem;
+  max-width: 22rem;
+  margin: 0;
+}
+
+.range-day-modal-search input {
+  width: 100%;
+}
+
+.range-day-games-scroll {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 0 1.15rem 1rem;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.range-day-games-scroll.is-height-locked {
+  flex: 0 0 auto;
+}
+
+#rangeDayGamesModal .range-day-games-table.range-table {
+  min-width: 0;
+}
+
+.range-day-games-table {
+  margin: 0;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+#rangeDayGamesModal .range-day-games-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #161f2a;
+  box-shadow: 0 1px 0 var(--border-strong);
+}
+
+#rangeDayGamesModal .range-day-games-table th,
+#rangeDayGamesModal .range-day-games-table td {
+  text-align: left;
+}
+
+.range-day-games-table th:first-child,
+.range-day-games-table td.range-day-game-num {
+  width: 2.75rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-day-games-table th:nth-child(2),
+.range-day-games-table td.range-day-game-name {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.range-day-games-table th:nth-child(n + 3),
+.range-day-games-table td.range-day-game-metric {
+  width: 4.75rem;
+  padding-right: 0.45rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-day-games-table td.range-day-game-spins {
+  font-weight: 600;
+}
+
+.range-day-games-table tbody tr.range-day-game-row.is-max td {
+  background: color-mix(in srgb, var(--c-up) 10%, transparent);
+}
+
+.range-day-games-table tbody tr.range-day-game-row.is-min td {
+  background: color-mix(in srgb, var(--c-down) 8%, transparent);
+}
+
+.range-day-games-table tbody tr.range-day-game-row.is-next td {
+  background: color-mix(in srgb, var(--c-warn) 8%, transparent);
 }
 
 .range-game {
@@ -676,6 +851,59 @@ tr.diff-changed td:first-child { box-shadow: inset 3px 0 0 var(--c-warn); }
   border-radius: 50%;
   background: #fff;
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+#drillDownCard.drill-owner-tx-layout {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--app-header-sticky-height, 0px) - 1.5rem);
+  min-height: 0;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+#drillDownCard.drill-owner-tx-layout .page-head,
+#drillDownCard.drill-owner-tx-layout #drillOwnerTxToolbar,
+#drillDownCard.drill-owner-tx-layout #drillOwnerTxToolbar .filters,
+#drillDownCard.drill-owner-tx-layout #ownerTxPager,
+#drillDownCard.drill-owner-tx-layout #ownerTxDetailTotals {
+  flex-shrink: 0;
+}
+
+#drillDownCard.drill-owner-tx-layout #drillOwnerTxToolbar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#drillDownCard.drill-owner-tx-layout #drillTableWrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+}
+
+#drillDownCard.drill-owner-tx-layout #drillTableWrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #161f2a;
+  box-shadow: 0 1px 0 var(--border-strong);
+}
+
+.owner-tx-detail-totals {
+  margin: 0.65rem 0 0;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+}
+
+.owner-tx-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+#drillDownCard.drill-owner-tx-layout #ownerTxHint {
+  flex-shrink: 0;
 }
 
 #drillTableWrap tr.row-new td { animation: row-new 4s ease-out; }

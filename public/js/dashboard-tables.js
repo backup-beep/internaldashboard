@@ -434,7 +434,7 @@ const LOW_RATING_MAX = 2;
 
 let userFeedbacksData = [];
 /** Applied filter values (yyyy-mm-dd or ''; star '1'–'5', 'low' or 'all'). */
-const feedbackFilter = { from: '', to: '', star: 'all' };
+const feedbackFilter = { from: '', to: '', star: 'all', search: '' };
 /** Visible (filtered + sorted) feedbacks per user row; reset whenever data or filters change. */
 let visibleFeedbacksCache = new WeakMap();
 
@@ -522,6 +522,9 @@ function updateFeedbackFilterHint() {
   if (feedbackFilter.star && feedbackFilter.star !== 'all') {
     parts.push(feedbackFilter.star === 'low' ? '≤ ' + LOW_RATING_MAX + ' ★' : feedbackFilter.star + ' ★');
   }
+  if (feedbackFilter.search) {
+    parts.push('search "' + feedbackFilter.search + '"');
+  }
   hint.textContent = 'Showing ' + parts.join(' · ');
 }
 
@@ -562,12 +565,31 @@ function feedbackMessagesCell(userRow) {
   return '<ul class="feedback-messages">' + messages.map((m) => '<li>' + escHtml(m) + '</li>').join('') + '</ul>';
 }
 
+function matchesFeedbackSearch(userRow, query) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  if (String(userRow.username || '').toLowerCase().includes(q)) return true;
+  if (String(userRow.userId || '').toLowerCase().includes(q)) return true;
+  return getVisibleFeedbacksForUser(userRow).some((f) => {
+    if (feedbackText(f).toLowerCase().includes(q)) return true;
+    if (f.ratingStar != null && String(f.ratingStar).includes(q)) return true;
+    return false;
+  });
+}
+
 function filterUserFeedbacks(rows) {
   if (!Array.isArray(rows)) return [];
   const hasDate = !!(feedbackFilter.from || feedbackFilter.to);
   const hasStar = !!(feedbackFilter.star && feedbackFilter.star !== 'all');
-  if (!hasDate && !hasStar) return rows.slice();
-  return rows.filter((r) => getVisibleFeedbacksForUser(r).length > 0);
+  const hasSearch = !!feedbackFilter.search;
+  let filtered = rows.slice();
+  if (hasDate || hasStar) {
+    filtered = filtered.filter((r) => getVisibleFeedbacksForUser(r).length > 0);
+  }
+  if (hasSearch) {
+    filtered = filtered.filter((r) => matchesFeedbackSearch(r, feedbackFilter.search));
+  }
+  return filtered;
 }
 
 function updateFeedbackHeaderStats(filteredUsers) {
@@ -581,15 +603,17 @@ function applyFeedbackDateFilter() {
   feedbackFilter.from = $('feedbackDateFrom')?.value || '';
   feedbackFilter.to = $('feedbackDateTo')?.value || '';
   feedbackFilter.star = $('feedbackStarFilter')?.value || 'all';
+  feedbackFilter.search = ($('feedbackSearch')?.value || '').trim();
   visibleFeedbacksCache = new WeakMap();
   renderUserFeedbacksTable();
 }
 
 /** Set the inputs and apply in one step (Clear button, attention alerts). */
-function setFeedbackFilter({ from = '', to = '', star = 'all' } = {}) {
+function setFeedbackFilter({ from = '', to = '', star = 'all', search = '' } = {}) {
   setInputValue('feedbackDateFrom', from);
   setInputValue('feedbackDateTo', to);
   setInputValue('feedbackStarFilter', star);
+  setInputValue('feedbackSearch', search);
   applyFeedbackDateFilter();
 }
 
@@ -637,10 +661,13 @@ function renderUserFeedbacksTable() {
     updateFeedbackFilterHint();
     updateSectionNavCount('sec-feedbacks', filtered.length);
   if (!isExplorerSectionActive('sec-feedbacks')) return;
-  renderTable('userFeedbacksWrap', filtered, FEEDBACK_COLUMNS, 'No feedback for the selected dates / stars.', {
+  const emptyMsg = feedbackFilter.search
+    ? 'No feedback matches your search.'
+    : 'No feedback for the selected dates / stars.';
+  renderTable('userFeedbacksWrap', filtered, FEEDBACK_COLUMNS, emptyMsg, {
     explore: 'userFeedbacksWrap',
     rerender: renderUserFeedbacksTable,
-    resetKey: feedbackFilter.from + '|' + feedbackFilter.to + '|' + feedbackFilter.star,
+    resetKey: feedbackFilter.from + '|' + feedbackFilter.to + '|' + feedbackFilter.star + '|' + feedbackFilter.search,
   });
 }
 
@@ -721,7 +748,6 @@ const REWARD_RECORD_TABS = {
     amountKey: 'reward',
     dateKey: 'createdAt',
     empty: 'No spin wheel records match these filters.',
-    demo: (query) => getDemoSpinWheelRecords(query),
     normalize: (r) => ({
       id: apiField(r, 'id', ''),
       userId: apiField(r, 'userId', ''),
@@ -751,7 +777,6 @@ const REWARD_RECORD_TABS = {
     dateKey: 'claimedAt',
     trackStreak: true,
     empty: 'No daily reward records match these filters.',
-    demo: (query) => getDemoDailyRewardRecords(query),
     normalize: (r) => ({
       id: apiField(r, 'id', ''),
       userId: apiField(r, 'userId', ''),
@@ -834,37 +859,8 @@ function normalizeRewardGroup(r) {
   };
 }
 
-/** Demo has no server groups, so the full sample list is grouped here and then paged. */
-function demoRewardPage(cfg, query) {
-  const pageSize = query.pageSize || REWARD_RECORD_PAGE_SIZE;
-  if (query.logs) {
-    const pageData = cfg.demo({ ...query, pageSize });
-    return {
-      items: pageData.items || [],
-      groups: [],
-      totalCount: Number(pageData.totalCount || 0),
-      userCount: 0,
-      page: Number(pageData.page || query.page || 1),
-      pageSize,
-    };
-  }
-  const all = cfg.demo({ ...query, page: 1, pageSize: 100000 });
-  const groups = groupRewardUsers(cfg, (all.items || []).map(cfg.normalize));
-  const page = Math.max(1, Number(query.page || 1));
-  const start = (page - 1) * pageSize;
-  return {
-    items: [],
-    groups: groups.slice(start, start + pageSize),
-    totalCount: (all.items || []).length,
-    userCount: groups.length,
-    page,
-    pageSize,
-  };
-}
-
 async function fetchRewardRecords(cfg, query) {
   const pageSize = query.pageSize || REWARD_RECORD_PAGE_SIZE;
-  if (isDemoMode()) return demoRewardPage(cfg, query);
 
   const params = new URLSearchParams();
   params.set('page', String(query.page || 1));
@@ -1217,6 +1213,21 @@ function bindFeedbackEvents() {
   for (const id of ['feedbackDateFrom', 'feedbackDateTo']) {
     $(id).addEventListener('keydown', (e) => {
       if (e.key === 'Enter') applyFeedbackDateFilter();
+    });
+  }
+  const searchEl = $('feedbackSearch');
+  if (searchEl) {
+    let searchTimer = null;
+    searchEl.addEventListener('input', () => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(applyFeedbackDateFilter, SEARCH_DEBOUNCE_MS);
+    });
+    searchEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.clearTimeout(searchTimer);
+        applyFeedbackDateFilter();
+      }
     });
   }
 }

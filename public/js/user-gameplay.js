@@ -305,7 +305,6 @@ function renderUserGameplay(data) {
 }
 
 async function fetchUserGameplay(userName) {
-  if (isDemoMode()) return getDemoUserGameplay(userName);
   return fetchUserGameplayJson('?userName=' + encodeURIComponent(userName));
 }
 
@@ -539,8 +538,6 @@ function renderUserGameplayDaily(data) {
 }
 
 async function fetchUserGameplayDaily(userId, from, to) {
-  if (isDemoMode()) return getDemoUserGameplayDaily(userId);
-
   const params = new URLSearchParams();
   params.set('userId', userId);
   if (from) params.set('from', from);
@@ -644,7 +641,7 @@ function renderUserGameplaySpinsPager() {
 
 function spinJsonButton(r) {
   const hasJson = spinHasJson(r);
-  // Stable index into userGameplaySpinsData so the modal can find the row (and its demo JSON).
+  // Stable index into userGameplaySpinsData so the modal can find the row.
   const sourceIndex = userGameplaySpinsData.indexOf(r);
   return '<button type="button" class="icon-btn json-btn" data-ugp-spin-json="' + escAttr(apiField(r, 'id', '')) +
     '" data-ugp-spin-idx="' + escAttr(String(sourceIndex)) + '"' +
@@ -730,8 +727,6 @@ function renderUserGameplaySpins(data) {
 }
 
 async function fetchUserGameplaySpins(userId, from, to, page, pageSize, gameId) {
-  if (isDemoMode()) return getDemoUserGameplaySpins(userId, from, gameId);
-
   const params = new URLSearchParams();
   params.set('userId', userId);
   params.set('page', String(page || 1));
